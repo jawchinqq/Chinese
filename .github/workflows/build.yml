@@ -16,27 +16,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 2. Create Files & Build APK
+      - name: 2. Setup Gradle 8.4
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
+      - name: 3. Create Android Project Files
         shell: bash
         run: |
           mkdir -p app/src/main/res/xml
           mkdir -p app/src/main/java/com/example/screeninstanttranslator
 
           printf '%s\n' \
-            'pluginManagement {' \
-            '    repositories {' \
-            '        google()' \
-            '        mavenCentral()' \
-            '        gradlePluginPortal()' \
-            '    }' \
-            '}' \
-            'dependencyResolutionManagement {' \
-            '    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)' \
-            '    repositories {' \
-            '        google()' \
-            '        mavenCentral()' \
-            '    }' \
-            '}' \
+            'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }' \
+            'dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }' \
             'rootProject.name = "ScreenInstantTranslator"' \
             "include ':app'" > settings.gradle
 
@@ -53,35 +46,147 @@ jobs:
             'android.nonTransitiveRClass=true' > gradle.properties
 
           printf '%s\n' \
-            'plugins {' \
-            "    id 'com.android.application'" \
-            "    id 'org.jetbrains.kotlin.android'" \
-            '}' \
+            'plugins { id "com.android.application"; id "org.jetbrains.kotlin.android" }' \
             'android {' \
-            "    namespace 'com.example.screeninstanttranslator'" \
+            '    namespace "com.example.screeninstanttranslator"' \
             '    compileSdk 34' \
             '    defaultConfig {' \
             '        applicationId "com.example.screeninstanttranslator"' \
             '        minSdk 26' \
             '        targetSdk 34' \
-            '        versionCode 2' \
-            '        versionName "1.1"' \
+            '        versionCode 3' \
+            '        versionName "1.2"' \
             '    }' \
-            '    compileOptions {' \
-            '        sourceCompatibility JavaVersion.VERSION_17' \
-            '        targetCompatibility JavaVersion.VERSION_17' \
-            '    }' \
-            '    kotlinOptions {' \
-            "        jvmTarget = '17'" \
-            '    }' \
+            '    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }' \
+            '    kotlinOptions { jvmTarget = "17" }' \
             '}' \
             'dependencies {' \
-            "    implementation 'androidx.appcompat:appcompat:1.6.1'" \
-            "    implementation 'androidx.core:core-ktx:1.12.0'" \
+            '    implementation "androidx.appcompat:appcompat:1.6.1"' \
+            '    implementation "androidx.core:core-ktx:1.12.0"' \
             '}' > app/build.gradle
 
           printf '%s\n' \
             '<?xml version="1.0" encoding="utf-8"?>' \
             '<manifest xmlns:android="http://schemas.android.com/apk/res/android">' \
             '    <uses-permission android:name="android.permission.INTERNET" />' \
-            '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />'
+            '    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />' \
+            '    <application android:allowBackup="true" android:label="全螢幕即時翻譯" android:supportsRtl="true" android:usesCleartextTraffic="true" android:theme="@style/Theme.AppCompat.Light.NoActionBar">' \
+            '        <activity android:name=".MainActivity" android:exported="true">' \
+            '            <intent-filter>' \
+            '                <action android:name="android.intent.action.MAIN" />' \
+            '                <category android:name="android.intent.category.LAUNCHER" />' \
+            '            </intent-filter>' \
+            '        </activity>' \
+            '        <service android:name=".ScreenTranslatorService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">' \
+            '            <intent-filter>' \
+            '                <action android:name="android.accessibilityservice.AccessibilityService" />' \
+            '            </intent-filter>' \
+            '            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config" />' \
+            '        </service>' \
+            '    </application>' \
+            '</manifest>' > app/src/main/AndroidManifest.xml
+
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="utf-8"?>' \
+            '<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"' \
+            '    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"' \
+            '    android:accessibilityFeedbackType="feedbackGeneric"' \
+            '    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"' \
+            '    android:canRetrieveWindowContent="true"' \
+            '    android:notificationTimeout="300" />' > app/src/main/res/xml/accessibility_service_config.xml
+
+          printf '%s\n' \
+            'package com.example.screeninstanttranslator' \
+            'import android.content.Intent' \
+            'import android.net.Uri' \
+            'import android.os.Bundle' \
+            'import android.provider.Settings' \
+            'import android.view.Gravity' \
+            'import android.widget.Button' \
+            'import android.widget.LinearLayout' \
+            'import android.widget.TextView' \
+            'import android.widget.Toast' \
+            'import androidx.appcompat.app.AppCompatActivity' \
+            'class MainActivity : AppCompatActivity() {' \
+            '    override fun onCreate(savedInstanceState: Bundle?) {' \
+            '        super.onCreate(savedInstanceState)' \
+            '        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(64, 64, 64, 64) }' \
+            '        val title = TextView(this).apply { text = "📱 全螢幕跨 App 自動翻譯 v1.2"; textSize = 22f; setPadding(0, 0, 0, 32) }' \
+            '        val desc = TextView(this).apply { text = "請依序開啟以下兩個權限（若按過 ✕ 關閉懸浮球，請點步驟 2 重新切換開關即可喚醒）："; textSize = 15f; setPadding(0, 0, 0, 48) }' \
+            '        val btnOverlay = Button(this).apply {' \
+            '            text = "步驟 1：允許「顯示於其他應用程式上層」"' \
+            '            setOnClickListener {' \
+            '                if (!Settings.canDrawOverlays(this@MainActivity)) {' \
+            '                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + packageName)))' \
+            '                } else { Toast.makeText(this@MainActivity, "✅ 懸浮視窗權限已開啟！", Toast.LENGTH_SHORT).show() }' \
+            '            }' \
+            '        }' \
+            '        val btnAccessibility = Button(this).apply {' \
+            '            text = "步驟 2：開啟「無障礙服務 (全螢幕即時翻譯)」"' \
+            '            setOnClickListener {' \
+            '                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))' \
+            '                Toast.makeText(this@MainActivity, "請找到「全螢幕即時翻譯」並將開關打開", Toast.LENGTH_LONG).show()' \
+            '            }' \
+            '        }' \
+            '        layout.addView(title); layout.addView(desc); layout.addView(btnOverlay); layout.addView(btnAccessibility)' \
+            '        setContentView(layout)' \
+            '    }' \
+            '}' > app/src/main/java/com/example/screeninstanttranslator/MainActivity.kt
+
+          printf '%s\n' \
+            'package com.example.screeninstanttranslator' \
+            'import android.accessibilityservice.AccessibilityService' \
+            'import android.graphics.Color' \
+            'import android.graphics.PixelFormat' \
+            'import android.graphics.drawable.GradientDrawable' \
+            'import android.os.Handler' \
+            'import android.os.Looper' \
+            'import android.view.Gravity' \
+            'import android.view.MotionEvent' \
+            'import android.view.View' \
+            'import android.view.WindowManager' \
+            'import android.view.accessibility.AccessibilityEvent' \
+            'import android.view.accessibility.AccessibilityNodeInfo' \
+            'import android.widget.LinearLayout' \
+            'import android.widget.ScrollView' \
+            'import android.widget.TextView' \
+            'import org.json.JSONArray' \
+            'import java.net.HttpURLConnection' \
+            'import java.net.URL' \
+            'import java.net.URLEncoder' \
+            'import java.util.concurrent.Executors' \
+            'class ScreenTranslatorService : AccessibilityService() {' \
+            '    private lateinit var windowManager: WindowManager' \
+            '    private lateinit var floatingRootLayout: LinearLayout' \
+            '    private lateinit var toggleButton: TextView' \
+            '    private lateinit var refreshButton: TextView' \
+            '    private lateinit var closeButton: TextView' \
+            '    private lateinit var resultScrollView: ScrollView' \
+            '    private lateinit var resultTextView: TextView' \
+            '    private var isAutoTranslating = false' \
+            '    private var lastExtractedText = ""' \
+            '    private val executor = Executors.newSingleThreadExecutor()' \
+            '    private val mainHandler = Handler(Looper.getMainLooper())' \
+            '    private var debounceRunnable: Runnable? = null' \
+            '    override fun onServiceConnected() { super.onServiceConnected(); setupFloatingOverlay() }' \
+            '    private fun setupFloatingOverlay() {' \
+            '        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager' \
+            '        val params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply { gravity = Gravity.TOP or Gravity.START; x = 20; y = 220 }' \
+            '        floatingRootLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }' \
+            '        val headerLayout = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }' \
+            '        toggleButton = TextView(this).apply {' \
+            '            text = "🌐 啟動即時翻"; setTextColor(Color.WHITE); textSize = 14f; setPadding(28, 18, 28, 18)' \
+            '            background = GradientDrawable().apply { setColor(Color.parseColor("#E61A73E8")); cornerRadius = 40f }' \
+            '        }' \
+            '        refreshButton = TextView(this).apply {' \
+            '            text = " 🔄 "; setTextColor(Color.WHITE); textSize = 15f; setPadding(18, 18, 18, 18); visibility = View.GONE' \
+            '            background = GradientDrawable().apply { setColor(Color.parseColor("#E6455A64")); cornerRadius = 40f }' \
+            '            setOnClickListener { lastExtractedText = ""; scanAndTranslateScreen() }' \
+            '        }' \
+            '        closeButton = TextView(this).apply {' \
+            '            text = " ✕ "; setTextColor(Color.WHITE); textSize = 15f; setPadding(20, 18, 20, 18)' \
+            '            background = GradientDrawable().apply { setColor(Color.parseColor("#E6D32F2F")); cornerRadius = 40f }' \
+            '            setOnClickListener { isAutoTranslating = false; floatingRootLayout.visibility = View.GONE; disableSelf() }' \
+            '        }' \
+            '        val marginParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { rightMargin = 10 }' \
+            '        headerLayout.addView(toggleButton, marginParams); headerLayout.addView(refreshButton, marginParams); header
